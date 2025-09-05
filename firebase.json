@@ -5,6 +5,15 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "hosting": {
+    "redirects": [
+      {
+        "source": "/**",
+        "destination": "https://moo-bday--moo-bday.us-central1.hosted.app/",
+        "type": 301
+      }
+    ]
+  },
   "apphosting": [
     {
       "backendId": "moo-bday",

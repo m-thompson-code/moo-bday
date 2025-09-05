@@ -1,74 +1,105 @@
-import { useChat } from "@ai-sdk/react";
+// app/play/page.tsx
+"use client";
+
 import { useState } from "react";
-import { getQuestionPrompt, getTopicPrompt, insertAvoidRepeatResponses } from "../prompts";
-import { TextUIPart } from "ai";
+import {
+  nextQuestions,
+  getLastQuestions,
+  resetQuestionsMemory,
+  type QuestionsResponse,
+} from "@/libs/partyQuestionsClient";
 
-const getQuestions = async () => {
-  console.log("loading...");
-    const res = await fetch("/api/get-questions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            /* prompt?: "optional custom prompt" */
-        }),
-    });
+export default function PlayPage() {
+  const [topic, setTopic] = useState("");
+  const [resp, setResp] = useState<QuestionsResponse | undefined>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | undefined>();
 
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+  async function handleGet() {
+    try {
+      setLoading(true);
+      setError(undefined);
+      const data = await nextQuestions(topic || undefined); // utilities own unit/style/seed/avoidDomains
+      setResp(data);
+    } catch (e: any) {
+      setError(e?.message || "Failed to get questions");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    return await res.json();
-};
+  function handleLoadLast() {
+    try {
+      setError(undefined);
+      const last = getLastQuestions(); // reads localStorage ONLY on click
+      if (!last) {
+        setError("No saved round yet — fetch a new set first.");
+        return;
+      }
+      setResp(last);
+    } catch {
+      setError("Couldn't load the last round.");
+    }
+  }
 
-export default function Chat() {
-    const [input, setInput] = useState("");
-    const { messages, sendMessage } = useChat();
+  function handleReset() {
+    resetQuestionsMemory();
+    setResp(undefined);
+    setError(undefined);
+  }
 
-    const prompt = getQuestionPrompt(input);
+  return (
+    <main className="max-w-2xl mx-auto p-6 space-y-4">
+      <h1 className="text-2xl font-semibold">Party Questions</h1>
 
-    const responses = messages
-        .filter((message) => message.role !== "user")
-        .map((message) =>
-            message.parts
-                .filter((part): part is TextUIPart => part.type === "text")
-                .map((part) => part.text)
-                .join(""),
-        )
-        .flat();
-    const _prompt = insertAvoidRepeatResponses(responses, prompt);
+      <div className="grid grid-cols-1 gap-3">
+        <label className="flex items-center gap-2">
+          <span className="w-44">Suggested topic (optional)</span>
+          <input
+            className="border rounded px-2 py-1 flex-1"
+            placeholder='e.g., "dating apps", "barbecues", "nostalgia"'
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+          />
+        </label>
 
-    const onClick = () => {
-        getQuestions().then(console.log);
-    };
-    return (
-        <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
-            {messages.map((message) => (
-                <div key={message.id} className="whitespace-pre-wrap">
-                    {message.role === "user" ? "User: " : "AI: "}
-                    {message.parts.map((part, i) => {
-                        switch (part.type) {
-                            case "text":
-                                return <div key={`${message.id}-${i}`}>{part.text}</div>;
-                        }
-                    })}
-                </div>
-            ))}
-
-            <form
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    sendMessage({ text: _prompt });
-                    setInput("");
-                }}
-            >
-                <input
-                    className="fixed dark:bg-zinc-900 bottom-0 w-full max-w-md p-2 mb-8 border border-zinc-300 dark:border-zinc-800 rounded shadow-xl"
-                    value={input}
-                    placeholder="Say something..."
-                    onChange={(e) => setInput(e.currentTarget.value)}
-                />
-            </form>
-            <button onClick={onClick}>Test</button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="bg-black text-white rounded px-3 py-2 disabled:opacity-60"
+            onClick={handleGet}
+            disabled={loading}
+          >
+            {loading ? "Loading..." : "Get questions"}
+          </button>
+          <button className="border rounded px-3 py-2" onClick={handleLoadLast}>
+            Load last
+          </button>
+          <button className="border rounded px-3 py-2" onClick={handleReset}>
+            Reset memory
+          </button>
         </div>
-    );
+      </div>
+
+      {error && <p className="text-red-600">{error}</p>}
+
+      {resp && (
+        <section className="mt-4 space-y-3">
+          <div className="text-sm text-gray-600">
+            Style: <b>{resp.style}</b> • Domains: <b>{resp.domainsUsed.join(", ")}</b>
+          </div>
+          {resp.questions.map((q, i) => (
+            <div key={i} className="border rounded p-3">
+              <div className="text-xs uppercase tracking-wide text-gray-500">
+                Domain: {q.domain}
+              </div>
+              <div className="text-lg">{q.question}</div>
+              <div className="text-sm text-gray-700">
+                Range: {q.min}-{q.max} • Avg: {q.average}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+    </main>
+  );
 }
