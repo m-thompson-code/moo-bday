@@ -6,11 +6,10 @@ import {
   getDoc,
   setDoc,
   onSnapshot,
-  updateDoc,
   type Unsubscribe,
 } from "firebase/firestore";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { firebaseConfig } from "./firebase.config";
+import { Question } from "./partyQuestionsClient";
 
 // --- Initialize Firebase (safe across modules) ---
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
@@ -43,8 +42,8 @@ export type SessionDoc =
           mode: "question";
           loading: false;
           players: PlayersMap;
-          realQuestion: string;
-          spyQuestion: string;
+          realQuestion: Question;
+          spyQuestion: Question;
           spy: string;
           suggestion?: {
             suggestedBy: string;
@@ -117,9 +116,9 @@ export function listenSession(cb: (s: SessionDoc | null) => void): Unsubscribe {
           mode: "question",
           loading: false,
           players: raw.players ?? {},
-          realQuestion: String(raw.realQuestion ?? "Placeholder real question"),
-          spyQuestion: String(raw.spyQuestion ?? "Placeholder spy question"),
-          spy: String(raw.spy ?? ""),
+          realQuestion: raw.realQuestion,
+          spyQuestion: raw.spyQuestion,
+          spy: raw.spy,
           suggestion: raw.suggestion,
         });
         return;
@@ -218,8 +217,8 @@ export async function setRoundLoading(mode: "question" | "codeword") {
 
 export async function finalizeQuestionRound(payload: {
   players: PlayersMap;
-  realQuestion: string;
-  spyQuestion: string;
+  realQuestion: Question;
+  spyQuestion: Question;
   spy: string;
   suggestion?: { suggestedBy: string; text: string };
 }) {

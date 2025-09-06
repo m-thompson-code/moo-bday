@@ -46,6 +46,7 @@ export interface Question {
   max: number;
   average: number;
   domain: Domain;
+  style: Style;
 }
 export interface QuestionsResponse {
   style: Style;
@@ -137,7 +138,10 @@ async function requestQuestions(payload: {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error ?? `Request failed with ${res.status}`);
   }
-  return (await res.json()) as QuestionsResponse;
+
+  const resp = (await res.json()) as QuestionsResponse;
+
+  return { ...resp, questions: resp.questions.map(q => ({ ...q, style: payload.style })) as [Question, Question] }; // ensure style matches request
 }
 
 // ---- public helpers
