@@ -21,13 +21,24 @@ type TopicApiOk = { answer: string; topic: string };
 
 const LS_KEY = "get-topic:previousResponses:v1";
 
-const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+const getSuggestion = (players: PlayersMap, odds: number): string | undefined => {
+    if (odds !== 1 || Math.random() > odds) return undefined; // chance of no suggestion
+    const suggestions = Object.values(players)
+        .map((p) => p.suggestion?.trim())
+        .filter((s) => s && s.length > 0) as string[];
+    if (suggestions.length === 0) return undefined;
+    return suggestions[Math.floor(Math.random() * suggestions.length)];
+};
 
-const MODES: SessionMode[] = ["codeword", "question", "unset"];
-const SPY_ID = "6MSPlUSzGiXeRePaudQzt5VOuN13"; // hardcoded per requirement
+const getSpyId = (players: PlayersMap): string => {
+    const uids = Object.keys(players);
+
+    return uids[Math.floor(Math.random() * uids.length)];
+};
 
 export default function WelcomePage() {
     const [prev, setPrev] = useState<string[]>([]);
+    console.log(prev);
     const auth = useAuthStatus(); // includes .isAdmin
     const { status: nameStatus, username, save } = useUsername(); // <-- get save()
     const session = useSession(); // SessionDoc | null while loading
@@ -103,10 +114,12 @@ export default function WelcomePage() {
     }
 
     async function handleGetQuestions() {
-        const topic = "";
+        const suggestion = getSuggestion(players, 0.34);
+        const spyId = getSpyId(players);
 
         try {
-            return await nextQuestions(topic || undefined); // utilities own unit/style/seed/avoidDomains
+            const data = await nextQuestions(suggestion || undefined); // utilities own unit/style/seed/avoidDomains
+            return { data, suggestion, spyId };
         } catch (e: any) {
             console.error(e);
             return handleGetQuestions();
@@ -114,8 +127,11 @@ export default function WelcomePage() {
     }
 
     async function handleGetTopic() {
+        const suggestion = getSuggestion(players, 1);
+        const spyId = getSpyId(players);
+
         try {
-            const topic = "";
+            const topic = suggestion;
             const res = await fetch("/api/get-topic", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -132,7 +148,9 @@ export default function WelcomePage() {
 
             const data = (await res.json()) as TopicApiOk;
 
-            return data as TopicApiOk;
+            setPrev(prev => [...prev, data.answer]); // keep last 20
+
+            return { data: data as TopicApiOk, suggestion, spyId };
         } catch (e) {
             console.error(e);
             // return handleGetTopic();
@@ -161,21 +179,21 @@ export default function WelcomePage() {
             if (__session.mode === "question") {
                 const resp = await handleGetQuestions(); // no topic override
 
-                console.log(resp);
-
                 await finalizeQuestionRound({
                     players,
-                    spy: SPY_ID,
-                    realQuestion: resp.questions[0],
-                    spyQuestion: resp.questions[1],
+                    spy: resp.spyId,
+                    realQuestion: resp.data.questions[0],
+                    spyQuestion: resp.data.questions[1],
+                    suggestion: resp.suggestion,
                 });
             } else {
-              const resp = await handleGetTopic();
+                const resp = await handleGetTopic();
                 await finalizeCodewordRound({
                     players,
-                    spy: SPY_ID,
-                    topic: resp.topic,
-                    codeword: resp.answer,
+                    spy: resp.spyId,
+                    topic: resp.data.topic,
+                    codeword: resp.data.answer,
+                    suggestion: resp.suggestion,
                 });
             }
         } catch {
@@ -201,6 +219,7 @@ export default function WelcomePage() {
         if (!isAdmin) return;
         if (!confirm("Reset the current session? This clears players and mode.")) return;
         setResetting(true);
+        setPrev([]);
         try {
             await resetSession();
         } finally {
@@ -212,7 +231,7 @@ export default function WelcomePage() {
     const loadingGate = !(isSignedIn && nameStatus === "has-username" && session !== null);
     if (loadingGate) {
         return (
-            <main style={{ maxWidth: 720, margin: "2rem auto", padding: "1rem" }}>
+            <main style={{ maxWidth: 720, margin: "8px auto", padding: "8px" }}>
                 <p>Loading…</p>
             </main>
         );
@@ -221,12 +240,8 @@ export default function WelcomePage() {
     const isSpy = (session as any).spy && uid ? (session as any).spy === uid : false;
 
     return (
-        <main style={{ maxWidth: 720, margin: "2rem auto", padding: "1rem" }}>
+        <main style={{ maxWidth: 720, margin: "8px auto", padding: "8px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
-                    Welcome, {username} {isAdmin ? "👑" : "👋"}
-                </h1>
-
                 {/* Role chip */}
                 <div
                     style={{
@@ -239,7 +254,7 @@ export default function WelcomePage() {
                         color: isAdmin ? "#1a8f18" : "#0d63ff",
                     }}
                 >
-                    {isAdmin ? "Admin" : "Player"}
+                    {isSpy ? "SPY" : "PLAYER"}
                 </div>
 
                 {/* Mode chip + loading indicator */}
@@ -249,18 +264,16 @@ export default function WelcomePage() {
                         padding: "6px 10px",
                         borderRadius: 8,
                         border: "1px solid #ddd",
-                        color: "#333",
                     }}
                 >
                     Mode:{" "}
                     <b style={{ textTransform: "capitalize" }}>
                         {session!.mode}
-                        {"loading" in (session as any) && (session as any).loading === true ? " (loading)" : ""}
                     </b>
                 </div>
 
                 {/* Player count — visible to everyone */}
-                <div style={{ color: "#666", fontSize: 14 }}>
+                <div style={{ fontSize: 14 }}>
                     Players: <b>{totalPlayers}</b>
                 </div>
             </div>
@@ -284,6 +297,7 @@ export default function WelcomePage() {
                                     onClick={() => handleSetMode(m)}
                                     disabled={session!.mode === m}
                                     style={{
+                                        color: "#666",
                                         padding: "8px 12px",
                                         borderRadius: 6,
                                         border: "1px solid #ccc",
@@ -299,6 +313,7 @@ export default function WelcomePage() {
                                 <button
                                     onClick={() => handleNext()}
                                     style={{
+                                        color: "#666",
                                         padding: "8px 12px",
                                         borderRadius: 6,
                                         border: "1px solid #ccc",
@@ -340,33 +355,11 @@ export default function WelcomePage() {
                 </section>
             )}
 
-            {/* Player suggestion input (joined players only) */}
-            {joined && (
-                <section
-                    style={{
-                        border: "1px solid #eee",
-                        borderRadius: 8,
-                        padding: 16,
-                        marginTop: 16,
-                    }}
-                >
-                    <div style={{ fontWeight: 600, marginBottom: 8 }}>Your suggestion</div>
-                    <textarea
-                        rows={3}
-                        value={mySuggestion}
-                        onChange={handleSuggestionChange}
-                        placeholder="Type your suggestion…"
-                        style={{
-                            width: "100%",
-                            padding: 10,
-                            borderRadius: 8,
-                            border: "1px solid #ccc",
-                            resize: "vertical",
-                        }}
-                    />
-                    <p style={{ color: "#666", fontSize: 12, marginTop: 6 }}>Everyone’s suggestion is saved under their player entry.</p>
-                </section>
-            )}
+            {session.mode === "question" && session.suggestion ? (
+                <div style={{ marginTop: 16 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Suggested Topic: {session?.suggestion || "No suggestion available."}</div>
+                </div>
+            ) : null}
 
             {/* Round display */}
             {session.mode === "question" && (
@@ -386,15 +379,15 @@ export default function WelcomePage() {
                                 <p>
                                     <b>Your spy question:</b>{" "}
                                     {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).spyQuestion.question}
-                                    {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).spyQuestion.style}
-                                    {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).spyQuestion.domain}
+                                    {/* {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).spyQuestion.style} */}
+                                    {/* {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).spyQuestion.domain} */}
                                 </p>
                             ) : (
                                 <p>
                                     <b>Your question:</b>{" "}
                                     {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).realQuestion.question}
-                                    {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).realQuestion.style}
-                                    {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).realQuestion.domain}
+                                    {/* {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).realQuestion.style} */}
+                                    {/* {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).realQuestion.domain} */}
                                 </p>
                             )}
                         </>
@@ -433,53 +426,82 @@ export default function WelcomePage() {
             )}
 
             {/* Join panel (now with editable username) */}
-            <section
-                style={{
-                    border: "1px solid #eee",
-                    borderRadius: 8,
-                    padding: 16,
-                    marginTop: 16,
-                }}
-            >
-                {!joined ? (
-                    <>
-                        <p style={{ marginBottom: 12 }}>Update your username if needed, then tap below to join the current session.</p>
-                        <div style={{ display: "grid", gap: 8, maxWidth: 420 }}>
-                            <input
-                                type="text"
-                                value={joinName}
-                                onChange={(e) => setJoinName(e.target.value)}
-                                placeholder="Username"
-                                minLength={2}
-                                maxLength={40}
-                                style={{
-                                    padding: 10,
-                                    borderRadius: 8,
-                                    border: "1px solid #ccc",
-                                }}
-                            />
-                            <button
-                                onClick={handleJoin}
-                                disabled={joining || !joinName.trim()}
-                                style={{
-                                    padding: "8px 12px",
-                                    borderRadius: 6,
-                                    background: "black",
-                                    color: "white",
-                                    opacity: !joinName.trim() ? 0.6 : 1,
-                                }}
-                            >
-                                {joining ? "Joining…" : "Join"}
-                            </button>
+            {session!.mode === "unset" ? (
+                <section
+                    style={{
+                        border: "1px solid #eee",
+                        borderRadius: 8,
+                        padding: 16,
+                        marginTop: 16,
+                    }}
+                >
+                    {!joined ? (
+                        <>
+                            <p style={{ marginBottom: 12 }}>Update your username if needed, then tap below to join the current session.</p>
+                            <div style={{ display: "grid", gap: 8, maxWidth: 420 }}>
+                                <input
+                                    type="text"
+                                    value={joinName}
+                                    onChange={(e) => setJoinName(e.target.value)}
+                                    placeholder="Username"
+                                    minLength={2}
+                                    maxLength={40}
+                                    style={{
+                                        padding: 10,
+                                        borderRadius: 8,
+                                        border: "1px solid #ccc",
+                                    }}
+                                />
+                                <button
+                                    onClick={handleJoin}
+                                    disabled={joining || !joinName.trim()}
+                                    style={{
+                                        padding: "8px 12px",
+                                        borderRadius: 6,
+                                        background: "black",
+                                        color: "white",
+                                        opacity: !joinName.trim() ? 0.6 : 1,
+                                    }}
+                                >
+                                    {joining ? "Joining…" : "Join"}
+                                </button>
+                            </div>
+                            {err && <p style={{ color: "#b00020", marginTop: 12 }}>{err}</p>}
+                        </>
+                    ) : (
+                        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                            <div>You’re in! 🎉</div>
                         </div>
-                        {err && <p style={{ color: "#b00020", marginTop: 12 }}>{err}</p>}
-                    </>
-                ) : (
-                    <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                        <div>You’re in! 🎉</div>
-                    </div>
-                )}
-            </section>
+                    )}
+                </section>
+            ) : null}
+
+            {/* Player suggestion input (joined players only) */}
+            {joined && (
+                <section
+                    style={{
+                        border: "1px solid #eee",
+                        borderRadius: 8,
+                        padding: 16,
+                        marginTop: 16,
+                    }}
+                >
+                    <div style={{ fontWeight: 600, marginBottom: 8 }}>Your suggestion</div>
+                    <textarea
+                        rows={3}
+                        value={mySuggestion}
+                        onChange={handleSuggestionChange}
+                        placeholder="Type your suggestion…"
+                        style={{
+                            width: "100%",
+                            padding: 10,
+                            borderRadius: 8,
+                            border: "1px solid #ccc",
+                            resize: "vertical",
+                        }}
+                    />
+                </section>
+            )}
         </main>
     );
 }

@@ -60,14 +60,14 @@ export default function UsernamePage() {
 
   if (status.state !== "signed-in" || checking) {
     return (
-      <main style={{ maxWidth: 480, margin: "2rem auto", padding: "1rem" }}>
+      <main style={{ maxWidth: 480, margin: "8px auto", padding: "8px" }}>
         <p>Preparing your session…</p>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 480, margin: "2rem auto", padding: "1rem" }}>
+    <main style={{ maxWidth: 480, margin: "8px auto", padding: "8px" }}>
       <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 12 }}>Choose a username</h1>
       <form onSubmit={saveUsername} style={{ display: "grid", gap: 12 }}>
         <input
@@ -87,9 +87,6 @@ export default function UsernamePage() {
           {saving ? "Saving…" : "Save & continue"}
         </button>
       </form>
-      <p style={{ color: "#666", fontSize: 14, marginTop: 8 }}>
-        We’ll store this nickname in Firestore on your anonymous account.
-      </p>
     </main>
   );
 }

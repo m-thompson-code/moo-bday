@@ -36,7 +36,7 @@ export default function AdminPage() {
   // Loading states until auth store has a user (or anon)
   if (status.state === "idle") {
     return (
-      <main style={{ maxWidth: 520, margin: "2rem auto", padding: "1rem" }}>
+      <main style={{ maxWidth: 520, margin: "8px auto", padding: "8px" }}>
         <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Admin</h1>
         <p>Preparing your session…</p>
       </main>
@@ -49,7 +49,7 @@ export default function AdminPage() {
   // If admin, show the gated area
   if (admin) {
     return (
-      <main style={{ maxWidth: 720, margin: "2rem auto", padding: "1rem" }}>
+      <main style={{ maxWidth: 720, margin: "8px auto", padding: "8px" }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>🛡️ Admin</h1>
         <p style={{ color: "#555", marginBottom: 16 }}>
           Signed in as <code>{status.user.email ?? "(no email)"}</code>
@@ -65,9 +65,9 @@ export default function AdminPage() {
 
   // Otherwise, show the password-only login for the fixed email
   return (
-    <main style={{ maxWidth: 520, margin: "2rem auto", padding: "1rem" }}>
+    <main style={{ maxWidth: 520, margin: "8px auto", padding: "8px" }}>
       <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Admin sign-in</h1>
-      <p style={{ color: "#666", marginBottom: 16 }}>
+      <p style={{ marginBottom: 16 }}>
         Email: <code>{FIXED_SIGNIN_EMAIL}</code>
       </p>
 
@@ -92,7 +92,7 @@ export default function AdminPage() {
       {err && <p style={{ color: "#b00020", marginTop: 12 }}>{err}</p>}
 
       {signedIn && !admin && (
-        <p style={{ color: "#666", fontSize: 13, marginTop: 12 }}>
+        <p style={{ fontSize: 13, marginTop: 12 }}>
           You’re currently signed in as{" "}
           <code>{status.user.email ?? (status.user.isAnonymous ? "anonymous user" : "(no email)")}</code>
           . Use the password above to access the admin account.

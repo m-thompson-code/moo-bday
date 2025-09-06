@@ -44,7 +44,7 @@ export default function HomePage() {
 
   // Simple skeleton while we decide where to send them
   return (
-    <main style={{ maxWidth: 480, margin: "2rem auto", padding: "1rem" }}>
+    <main style={{ maxWidth: 480, margin: "8px auto", padding: "8px" }}>
       <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Welcome</h1>
       <p>Preparing your session…</p>
     </main>
