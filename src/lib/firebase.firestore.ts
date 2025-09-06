@@ -21,21 +21,59 @@ export const db = getFirestore(app);
 // =========================
 export type SessionMode = "codeword" | "question" | "unset";
 
-export type Player = {
-  username: string;
-};
-
+export type Player = { username: string; suggestion: string }; // <-- updated
 export type PlayersMap = Record<string, Player>;
 
-export type SessionDoc = {
-  mode: SessionMode;
-  players: PlayersMap;
-  /** Optional spy uid; omitted by default on new session creation. */
-  spy?: string;
-};
+/** UPDATED per your spec (minimal viable union form) */
+export type SessionDoc =
+  | {
+      mode: "unset";
+      players: PlayersMap;
+      /** Optional spy uid; omitted by default on new session creation. */
+      spy?: never;
+    }
+  | (
+      | {
+          mode: "question";
+          loading: true;
+          players: PlayersMap;
+          spy?: never;
+        }
+      | {
+          mode: "question";
+          loading: false;
+          players: PlayersMap;
+          realQuestion: string;
+          spyQuestion: string;
+          spy: string;
+          suggestion?: {
+            suggestedBy: string;
+            text: string;
+          };
+        }
+    )
+  | (
+      | {
+          mode: "codeword";
+          loading: true;
+          players: PlayersMap;
+          spy?: never;
+        }
+      | {
+          mode: "codeword";
+          loading: false;
+          players: PlayersMap;
+          topic: string;
+          codeword: string;
+          spy: string;
+          suggestion?: {
+            suggestedBy: string;
+            text: string;
+          };
+        }
+    );
 
 const SESSION_ID = "current"; // single global session document
-
 export function sessionRef() {
   return doc(db, "sessions", SESSION_ID);
 }
@@ -43,7 +81,6 @@ export function sessionRef() {
 // =========================
 // User profile helpers
 // =========================
-
 export async function fetchUsername(uid: string): Promise<string | null> {
   const uref = doc(db, "users", uid);
   const snap = await getDoc(uref);
@@ -61,54 +98,90 @@ export async function setUsername(uid: string, username: string) {
 // Session helpers
 // =========================
 
-/** Live listener for the single session document.
- * If the doc or some fields are missing, default to { mode: 'unset', players: {} }.
- */
+/** Live listener; defaults to safe shape if doc/fields missing. */
 export function listenSession(cb: (s: SessionDoc | null) => void): Unsubscribe {
   return onSnapshot(sessionRef(), (snap) => {
     if (!snap.exists()) {
       cb({ mode: "unset", players: {} });
       return;
     }
-    const raw = snap.data() as Partial<SessionDoc> | undefined;
-    const safe: SessionDoc = {
-      mode: (raw?.mode as SessionMode) ?? "unset",
-      players: (raw?.players as PlayersMap) ?? {},
-      ...(raw && "spy" in raw ? { spy: raw.spy } : {}),
-    };
-    cb(safe);
+    const raw = snap.data() as any;
+
+    if (raw.mode === "question") {
+      if (raw.loading === true) {
+        cb({ mode: "question", loading: true, players: raw.players ?? {} });
+        return;
+      }
+      if (raw.loading === false) {
+        cb({
+          mode: "question",
+          loading: false,
+          players: raw.players ?? {},
+          realQuestion: String(raw.realQuestion ?? "Placeholder real question"),
+          spyQuestion: String(raw.spyQuestion ?? "Placeholder spy question"),
+          spy: String(raw.spy ?? ""),
+          suggestion: raw.suggestion,
+        });
+        return;
+      }
+      cb({ mode: "question", loading: true, players: raw.players ?? {} });
+      return;
+    }
+
+    if (raw.mode === "codeword") {
+      if (raw.loading === true) {
+        cb({ mode: "codeword", loading: true, players: raw.players ?? {} });
+        return;
+      }
+      if (raw.loading === false) {
+        cb({
+          mode: "codeword",
+          loading: false,
+          players: raw.players ?? {},
+          topic: String(raw.topic ?? "Placeholder topic"),
+          codeword: String(raw.codeword ?? "Placeholder codeword"),
+          spy: String(raw.spy ?? ""),
+          suggestion: raw.suggestion,
+        });
+        return;
+      }
+      cb({ mode: "codeword", loading: true, players: raw.players ?? {} });
+      return;
+    }
+
+    cb({ mode: "unset", players: raw.players ?? {} });
   });
 }
 
-/** Set the current game mode. */
+/** Set the current mode. Starts rounds at loading:true. */
 export async function setMode(mode: SessionMode) {
-  await updateDoc(sessionRef(), { mode });
+  if (mode === "unset") {
+    await setDoc(sessionRef(), { mode: "unset" }, { merge: true });
+  } else {
+    await setDoc(sessionRef(), { mode, loading: true }, { merge: true });
+  }
 }
 
-/** Reset the session to a clean state (spy omitted). */
+/** Reset to clean base. */
 export async function resetSession() {
-  const payload: SessionDoc = { mode: "unset", players: {} };
-  await setDoc(sessionRef(), payload, { merge: false });
+  await setDoc(sessionRef(), { mode: "unset", players: {} } as SessionDoc, {
+    merge: false,
+  });
 }
 
 // =========================
 // Players helpers (write whole "players" map)
 // =========================
 
-/**
- * Add (or overwrite) a player in the session by replacing the entire `players` object.
- * NEVER uses dotted paths; always writes the whole `players` map.
- * If the doc doesn't exist yet, create it with defaults.
- * If it exists, preserve the current mode.
- */
+/** Whole-map write, never dotted paths. Creates doc if missing. */
 export async function addPlayerToSession(uid: string, username: string) {
   const ref = sessionRef();
   const snap = await getDoc(ref);
-  const current: PlayersMap = snap.exists()
-    ? ((snap.data() as SessionDoc).players ?? {})
-    : {};
-
-  const next: PlayersMap = { ...current, [uid]: { username } };
+  const current: PlayersMap = snap.exists() ? (snap.data() as any).players ?? {} : {};
+  const next: PlayersMap = {
+    ...current,
+    [uid]: { username, suggestion: "" }, // <-- default suggestion = ""
+  };
 
   if (snap.exists()) {
     await setDoc(ref, { players: next }, { merge: true });
@@ -117,58 +190,75 @@ export async function addPlayerToSession(uid: string, username: string) {
   }
 }
 
+/** Update only a player's suggestion (whole-map write, no dotted paths). */
+export async function updatePlayerSuggestion(uid: string, suggestion: string) {
+  const ref = sessionRef();
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const current: PlayersMap = (snap.data() as any).players ?? {};
+  if (!current || typeof current !== "object" || !current[uid]) return;
+
+  const player = current[uid];
+  const next: PlayersMap = {
+    ...current,
+    [uid]: { ...player, suggestion },
+  };
+
+  await setDoc(ref, { players: next }, { merge: true });
+}
+
 // =========================
-// Name/username FSM (for useUsername hook)
+// Round helpers (unchanged except types accept PlayersMap with suggestion)
 // =========================
 
-export type NameStatus =
-  | { state: "idle" }
-  | { state: "missing-username" }
-  | { state: "has-username"; username: string };
-
-let _nameStatus: NameStatus = { state: "idle" };
-const _nameListeners = new Set<(s: NameStatus) => void>();
-let _startedName = false;
-let _authUnsub: (() => void) | null = null;
-
-function emitName() {
-  for (const l of _nameListeners) l(_nameStatus);
+export async function setRoundLoading(mode: "question" | "codeword") {
+  await setDoc(sessionRef(), { mode, loading: true }, { merge: true });
 }
 
-export function nameStatus(): NameStatus {
-  return _nameStatus;
+export async function finalizeQuestionRound(payload: {
+  players: PlayersMap;
+  realQuestion: string;
+  spyQuestion: string;
+  spy: string;
+  suggestion?: { suggestedBy: string; text: string };
+}) {
+  await setDoc(
+    sessionRef(),
+    {
+      mode: "question",
+      loading: false,
+      players: payload.players,
+      realQuestion: payload.realQuestion,
+      spyQuestion: payload.spyQuestion,
+      spy: payload.spy,
+      ...(payload.suggestion ? { suggestion: payload.suggestion } : {}),
+    } as SessionDoc,
+    { merge: true }
+  );
 }
 
-export function subscribeNameStatus(cb: (s: NameStatus) => void): () => void {
-  _nameListeners.add(cb);
-  return () => _nameListeners.delete(cb);
+export async function finalizeCodewordRound(payload: {
+  players: PlayersMap;
+  topic: string;
+  codeword: string;
+  spy: string;
+  suggestion?: { suggestedBy: string; text: string };
+}) {
+  await setDoc(
+    sessionRef(),
+    {
+      mode: "codeword",
+      loading: false,
+      players: payload.players,
+      topic: payload.topic,
+      codeword: payload.codeword,
+      spy: payload.spy,
+      ...(payload.suggestion ? { suggestion: payload.suggestion } : {}),
+    } as SessionDoc,
+    { merge: true }
+  );
 }
 
-/** Idempotent: starts watching auth and user doc to track username availability. */
-export function startNameStatus() {
-  if (_startedName) return;
-  _startedName = true;
-
-  const auth = getAuth(app);
-  _authUnsub = onAuthStateChanged(auth, async (u) => {
-    if (!u) {
-      _nameStatus = { state: "idle" };
-      emitName();
-      return;
-    }
-    const uname = await fetchUsername(u.uid);
-    if (uname) {
-      _nameStatus = { state: "has-username", username: uname };
-    } else {
-      _nameStatus = { state: "missing-username" };
-    }
-    emitName();
-  });
-}
-
-/** Upserts username and moves FSM to has-username immediately. */
-export async function upsertUsername(uid: string, username: string) {
-  await setUsername(uid, username);
-  _nameStatus = { state: "has-username", username: username.trim() };
-  emitName();
-}
+// =========================
+// Name/username FSM (unchan

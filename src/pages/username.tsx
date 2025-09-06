@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { useAuthStatus } from "@/lib/useAuthStatus";
-import { fetchUsername, upsertUsername } from "@/lib/firebase.firestore";
+import { fetchUsername, setUsername } from "@/lib/firebase.firestore";
 
 export default function UsernamePage() {
   const router = useRouter();
@@ -10,7 +10,7 @@ export default function UsernamePage() {
 
   const redirectedRef = useRef(false);
   const [checking, setChecking] = useState(true);
-  const [username, setUsername] = useState("");
+  const [username, _setUsername] = useState("");
   const [saving, setSaving] = useState(false);
 
   // If already have a username, go to /welcome
@@ -47,7 +47,7 @@ export default function UsernamePage() {
 
     setSaving(true);
     try {
-      await upsertUsername(status.user.uid, username.trim());
+      await setUsername(status.user.uid, username.trim());
 
       if (!redirectedRef.current && router.pathname !== "/welcome") {
         redirectedRef.current = true;
@@ -73,7 +73,7 @@ export default function UsernamePage() {
         <input
           type="text"
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) => _setUsername(e.target.value)}
           minLength={2}
           required
           placeholder="e.g. pixel_panda"

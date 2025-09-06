@@ -1,41 +1,66 @@
 // lib/useUsername.ts
+"use client";
+
 import { useEffect, useState } from "react";
 import { useAuthStatus } from "./useAuthStatus";
-import {
-  startNameStatus,
-  nameStatus,
-  subscribeNameStatus,
-  upsertUsername,
-  type NameStatus,
-} from "./firebase.firestore";
+import { fetchUsername, setUsername } from "./firebase.firestore";
+
+export type UsernameStatus = "idle" | "has-username" | "missing-username";
 
 /**
  * React hook to read and set the username.
- * - Mirrors the NameStatus FSM ("idle" | "has-username" | "missing-username")
- * - Exposes a `save(name)` that writes to Firestore and updates local cache + FSM
+ * - Derives state from auth + Firestore:
+ *   "idle" | "has-username" | "missing-username"
+ * - save(name) writes to Firestore and updates local state
  */
 export function useUsername(): {
-  status: NameStatus["state"];
+  status: UsernameStatus;
   username: string | null;
   save: (name: string) => Promise<void>;
 } {
   const auth = useAuthStatus();
-  const [ns, setNs] = useState<NameStatus>(nameStatus());
+  const [status, setStatus] = useState<UsernameStatus>("idle");
+  const [username, setLocalUsername] = useState<string | null>(null);
 
   useEffect(() => {
-    startNameStatus(); // idempotent
-    const unsub = subscribeNameStatus(setNs);
-    return unsub;
-  }, []);
+    let alive = true;
+
+    (async () => {
+      if (auth.state !== "signed-in") {
+        if (!alive) return;
+        setStatus("idle");
+        setLocalUsername(null);
+        return;
+      }
+
+      const name = await fetchUsername(auth.user.uid);
+      if (!alive) return;
+
+      if (name && name.trim()) {
+        setStatus("has-username");
+        setLocalUsername(name.trim());
+      } else {
+        setStatus("missing-username");
+        setLocalUsername(null);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [auth.state, auth.state === "signed-in" ? auth.user.uid : ""]);
 
   async function save(name: string) {
     if (auth.state !== "signed-in") throw new Error("Not signed in");
-    await upsertUsername(auth.user.uid, name);
+    const clean = name.trim();
+    await setUsername(auth.user.uid, clean);
+    setLocalUsername(clean);
+    setStatus("has-username");
   }
 
   return {
-    status: ns.state,
-    username: ns.state === "has-username" ? ns.username : null,
+    status,
+    username,
     save,
   };
 }
