@@ -13,6 +13,7 @@ import {
     type PlayersMap,
     type SessionMode,
     type SessionDoc,
+    revealQuestionRound,
 } from "@/lib/firebase.firestore";
 import { useSession } from "@/lib/useSession";
 import { nextQuestions } from "@/lib/partyQuestionsClient";
@@ -38,7 +39,6 @@ const getSpyId = (players: PlayersMap): string => {
 
 export default function WelcomePage() {
     const [prev, setPrev] = useState<string[]>([]);
-    console.log(prev);
     const auth = useAuthStatus(); // includes .isAdmin
     const { status: nameStatus, username, save } = useUsername(); // <-- get save()
     const session = useSession(); // SessionDoc | null while loading
@@ -227,6 +227,10 @@ export default function WelcomePage() {
         }
     }
 
+    async function revealQuestion() {
+        await revealQuestionRound();
+    }
+
     // Require: signed-in, has-username, and session snapshot loaded
     const loadingGate = !(isSignedIn && nameStatus === "has-username" && session !== null);
     if (loadingGate) {
@@ -336,6 +340,20 @@ export default function WelcomePage() {
                             >
                                 {resetting ? "Resetting…" : "Reset Session"}
                             </button>
+                            {(session.mode === "question") && (
+                                <button
+                                    onClick={() => revealQuestion()}
+                                    style={{
+                                        color: "#666",
+                                        padding: "8px 12px",
+                                        borderRadius: 6,
+                                        border: "1px solid #ccc",
+                                        background: "white",
+                                    }}
+                                >
+                                    Reveal
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -375,7 +393,7 @@ export default function WelcomePage() {
                         <p>Loading next question…</p>
                     ) : (
                         <>
-                            {(session as any).spy && uid && (session as any).spy === uid ? (
+                            {!(session as any).reveal && (session as any).spy && uid && (session as any).spy === uid ? (
                                 <p>
                                     <b>Your spy question:</b>{" "}
                                     {(session as Extract<SessionDoc, { mode: "question"; loading: false }>).spyQuestion.question}

@@ -32,6 +32,7 @@ export type SessionDoc =
                 players: PlayersMap;
                 spy?: never;
                 suggestion?: never;
+                reveal: boolean;
             }
           | {
                 mode: "question";
@@ -41,6 +42,7 @@ export type SessionDoc =
                 spyQuestion: Question;
                 spy: string;
                 suggestion?: string;
+                reveal: boolean;
             }
       )
     | (
@@ -98,7 +100,7 @@ export function listenSession(cb: (s: SessionDoc | null) => void): Unsubscribe {
 
         if (raw.mode === "question") {
             if (raw.loading === true) {
-                cb({ mode: "question", loading: true, players: raw.players ?? {} });
+                cb({ mode: "question", loading: true, players: raw.players ?? {}, reveal: false });
                 return;
             }
             if (raw.loading === false) {
@@ -110,10 +112,11 @@ export function listenSession(cb: (s: SessionDoc | null) => void): Unsubscribe {
                     spyQuestion: raw.spyQuestion,
                     spy: raw.spy,
                     suggestion: raw.suggestion,
+                    reveal: raw.reveal,
                 });
                 return;
             }
-            cb({ mode: "question", loading: true, players: raw.players ?? {} });
+            cb({ mode: "question", loading: true, players: raw.players ?? {}, reveal: false});
             return;
         }
 
@@ -221,7 +224,18 @@ export async function finalizeQuestionRound(payload: {
             realQuestion: payload.realQuestion,
             spyQuestion: payload.spyQuestion,
             spy: payload.spy,
+            reveal: false,
             ...(payload.suggestion ? { suggestion: payload.suggestion } : {}),
+        } as SessionDoc,
+        { merge: true },
+    );
+}
+
+export async function revealQuestionRound() {
+    await setDoc(
+        sessionRef(),
+        {
+          reveal: true,
         } as SessionDoc,
         { merge: true },
     );
