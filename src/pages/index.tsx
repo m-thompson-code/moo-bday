@@ -1,105 +1,52 @@
-// app/play/page.tsx
+// pages/index.tsx
 "use client";
 
-import { useState } from "react";
-import {
-  nextQuestions,
-  getLastQuestions,
-  resetQuestionsMemory,
-  type QuestionsResponse,
-} from "@/libs/partyQuestionsClient";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { useAuthStatus } from "@/lib/useAuthStatus";
+import { fetchUsername } from "@/lib/firebase.firestore";
 
-export default function PlayPage() {
-  const [topic, setTopic] = useState("");
-  const [resp, setResp] = useState<QuestionsResponse | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | undefined>();
+export default function HomePage() {
+  const router = useRouter();
+  const status = useAuthStatus();
+  const [checking, setChecking] = useState(true);
 
-  async function handleGet() {
-    try {
-      setLoading(true);
-      setError(undefined);
-      const data = await nextQuestions(topic || undefined); // utilities own unit/style/seed/avoidDomains
-      setResp(data);
-    } catch (e: any) {
-      setError(e?.message || "Failed to get questions");
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => {
+    let on = true;
 
-  function handleLoadLast() {
-    try {
-      setError(undefined);
-      const last = getLastQuestions(); // reads localStorage ONLY on click
-      if (!last) {
-        setError("No saved round yet — fetch a new set first.");
+    (async () => {
+      if (status.state === "idle") {
+        // waiting for _app.tsx bootstrap
         return;
       }
-      setResp(last);
-    } catch {
-      setError("Couldn't load the last round.");
-    }
-  }
+      if (status.state === "signed-out") {
+        // very rare for anon flow; just show loader
+        setChecking(false);
+        return;
+      }
+      if (status.state === "signed-in") {
+        const name = await fetchUsername(status.user.uid);
+        if (!on) return;
 
-  function handleReset() {
-    resetQuestionsMemory();
-    setResp(undefined);
-    setError(undefined);
-  }
+        if (name) {
+          router.replace("/welcome"); // has username → go to welcome
+        } else {
+          router.replace("/username"); // no username yet → go set it
+        }
+      }
+      setChecking(false);
+    })();
 
+    return () => {
+      on = false;
+    };
+  }, [status, router]);
+
+  // Simple skeleton while we decide where to send them
   return (
-    <main className="max-w-2xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Party Questions</h1>
-
-      <div className="grid grid-cols-1 gap-3">
-        <label className="flex items-center gap-2">
-          <span className="w-44">Suggested topic (optional)</span>
-          <input
-            className="border rounded px-2 py-1 flex-1"
-            placeholder='e.g., "dating apps", "barbecues", "nostalgia"'
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-          />
-        </label>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="bg-black text-white rounded px-3 py-2 disabled:opacity-60"
-            onClick={handleGet}
-            disabled={loading}
-          >
-            {loading ? "Loading..." : "Get questions"}
-          </button>
-          <button className="border rounded px-3 py-2" onClick={handleLoadLast}>
-            Load last
-          </button>
-          <button className="border rounded px-3 py-2" onClick={handleReset}>
-            Reset memory
-          </button>
-        </div>
-      </div>
-
-      {error && <p className="text-red-600">{error}</p>}
-
-      {resp && (
-        <section className="mt-4 space-y-3">
-          <div className="text-sm text-gray-600">
-            Style: <b>{resp.style}</b> • Domains: <b>{resp.domainsUsed.join(", ")}</b>
-          </div>
-          {resp.questions.map((q, i) => (
-            <div key={i} className="border rounded p-3">
-              <div className="text-xs uppercase tracking-wide text-gray-500">
-                Domain: {q.domain}
-              </div>
-              <div className="text-lg">{q.question}</div>
-              <div className="text-sm text-gray-700">
-                Range: {q.min}-{q.max} • Avg: {q.average}
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
+    <main style={{ maxWidth: 480, margin: "2rem auto", padding: "1rem" }}>
+      <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Welcome</h1>
+      <p>Preparing your session…</p>
     </main>
   );
 }
