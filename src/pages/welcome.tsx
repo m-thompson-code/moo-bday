@@ -114,7 +114,7 @@ export default function WelcomePage() {
     }
 
     async function handleGetQuestions() {
-        const suggestion = getSuggestion(players, 0.34);
+        const suggestion = getSuggestion(players, .34);
         const spyId = getSpyId(players);
 
         try {

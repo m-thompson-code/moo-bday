@@ -98,9 +98,8 @@ function makePrompt(opts: {
   const topicBlock = primaryTopic
     ? `
 Topic requirement (apply without mentioning any meta/instructions):
-- BOTH questions MUST be clearly about: ${primaryTopic}.
-- Use two different angles/facets so the wording isn't repetitive.
-${secondaryNudge ? `- Weave "${secondaryNudge}" naturally into exactly ONE of the two questions (no quotes, no meta).` : ""}
+- BOTH questions MUST be clearly about: ${secondaryNudge || primaryTopic}. ${secondaryNudge ? "Try to include primaryTopic as a sub focus" : ""}
+- Use two different angles/facets so the wording isn't repetitive. Naturally into exactly ONE of the two questions (no quotes, no meta).
 - Keep the SAME unit for both ("${unit}").
 - Ensure both questions naturally land on comparable magnitudes so answers could be confused.
 - Write naturally; do NOT use the words "topic", "rule", or "instruction".`

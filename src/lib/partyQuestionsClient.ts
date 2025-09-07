@@ -170,6 +170,7 @@ export async function nextQuestions(userSuggestedTopic?: string): Promise<Questi
   const primaryTopic = style === "cow" ? undefined : userTopic; // server defaults cow -> "cows"
   const secondaryNudge = userTopic;
     // style === "cow" && userTopic && userTopic.toLowerCase() !== "cows" ? userTopic : undefined;
+  console.log(secondaryNudge);
 
   const payload = {
     style,
