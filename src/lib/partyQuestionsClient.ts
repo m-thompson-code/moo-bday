@@ -168,8 +168,8 @@ export async function nextQuestions(userSuggestedTopic?: string): Promise<Questi
   // topics (let the server apply cow rules; we only send secondary when cow+topic)
   const userTopic = sanitize(userSuggestedTopic);
   const primaryTopic = style === "cow" ? undefined : userTopic; // server defaults cow -> "cows"
-  const secondaryNudge =
-    style === "cow" && userTopic && userTopic.toLowerCase() !== "cows" ? userTopic : undefined;
+  const secondaryNudge = userTopic;
+    // style === "cow" && userTopic && userTopic.toLowerCase() !== "cows" ? userTopic : undefined;
 
   const payload = {
     style,
